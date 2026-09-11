@@ -415,7 +415,7 @@ function pintarCarrito() {
 }
 
 const metodoPago = () =>
-  ($('input[name="metodo"]').find((r) => r.checked) || {}).value || 'efectivo';
+  ($$('input[name="metodo"]').find((r) => r.checked) || {}).value || 'efectivo';
 
 const totalCarrito = () =>
   Math.round(carrito.reduce((s, c) => s + c.monto * c.loterias.length, 0) * 100) / 100;

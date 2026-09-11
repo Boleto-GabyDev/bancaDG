@@ -22,6 +22,7 @@ if (!ADMIN_CLAVE) {
 }
 
 let token = '';
+let hoy = '';
 let fallos = 0, pasos = 0;
 
 async function llamar(metodo, ruta, datos) {
@@ -39,6 +40,50 @@ const get = (r) => llamar('GET', r);
 const post = (r, d) => llamar('POST', r, d);
 const put = (r, d) => llamar('PUT', r, d);
 const del = (r) => llamar('DELETE', r);
+
+/**
+ * Borra lo que dejo una corrida anterior, para que la prueba sea repetible.
+ *
+ * Un resultado no se puede borrar por la API si ya hay tickets pagados con el
+ * (y eso esta bien: protege datos reales), asi que la limpieza va directo a la
+ * base. Solo toca las loterias cuyo codigo empieza con TEST, nunca datos de
+ * operacion. Si no hay acceso a la base (prueba contra un despliegue remoto),
+ * se intenta por la API y se avisa si no alcanza.
+ */
+async function limpiarCorridaAnterior(ids) {
+  let db = null;
+  try { db = require('../src/db'); } catch { /* sin acceso directo */ }
+
+  if (db) {
+    const r = await db.q.correr(
+      `DELETE FROM tickets t
+        WHERE EXISTS (
+          SELECT 1 FROM jugadas j
+           WHERE j.ticket_id = t.id
+             AND j.loteria_id IN (SELECT id FROM loterias WHERE codigo LIKE 'TEST%'))`
+    );
+    await db.q.correr(
+      `DELETE FROM resultados
+        WHERE loteria_id IN (SELECT id FROM loterias WHERE codigo LIKE 'TEST%')`
+    );
+    if (r.filas) console.log(`  limpieza: ${r.filas} ticket(s) de pruebas anteriores eliminados`);
+    return;
+  }
+
+  for (const cod of ['TEST1', 'TEST2']) {
+    try {
+      await del(`/resultados?loteria_id=${ids[cod]}&fecha=${hoy}`);
+    } catch (e) {
+      if (/pagados/i.test(e.message)) {
+        console.error('\n  No se puede limpiar la corrida anterior a traves de la API:');
+        console.error(`  ${e.message.split('\n')[0]}`);
+        console.error('  Corra la prueba desde la maquina que tiene el .env, o borre a mano');
+        console.error("  los tickets de las loterias TEST% en Supabase.\n");
+        process.exit(2);
+      }
+    }
+  }
+}
 
 function ok(nombre, condicion, extra = '') {
   pasos++;
@@ -78,7 +123,7 @@ async function debeFallar(nombre, fn, fragmento) {
   ok('login del administrador', login.usuario.rol === 'admin');
 
   const yo = await get('/auth/yo');
-  const hoy = yo.config.hoy;
+  hoy = yo.config.hoy;
   console.log(`  fecha de negocio: ${hoy}`);
 
   console.log('\n=== 2. LOTERIAS DE PRUEBA ===');
@@ -95,9 +140,7 @@ async function debeFallar(nombre, fn, fragmento) {
   }
   ok('loterias de prueba listas', !!ids.TEST1 && !!ids.TEST2);
 
-  for (const cod of ['TEST1', 'TEST2']) {
-    try { await del(`/resultados?loteria_id=${ids[cod]}&fecha=${hoy}`); } catch { /* no habia */ }
-  }
+  await limpiarCorridaAnterior(ids);
 
   const cat = await get(`/catalogo/loterias?fecha=${hoy}`);
   const t1 = cat.loterias.find((l) => l.id === ids.TEST1);
@@ -246,6 +289,7 @@ async function debeFallar(nombre, fn, fragmento) {
   console.log(`  ${pasos - fallos} de ${pasos} comprobaciones correctas`);
   console.log(`  ${fallos === 0 ? 'TODO BIEN' : fallos + ' FALLO(S)'}`);
   console.log('============================================\n');
+  try { require('../src/db').cerrar(); } catch {}
   process.exit(fallos ? 1 : 0);
 })().catch((e) => {
   console.error('\n  ERROR NO CONTROLADO:', e.message);

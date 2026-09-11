@@ -57,25 +57,84 @@ async function vendidoDe(fecha, loteriaId, loteria2Id, tipo, numeros) {
 }
 
 /**
+ * Resuelve la cascada de topes en memoria, a partir de la tabla completa.
+ * `limites` es configuracion: son unas pocas filas, traerlas enteras sale
+ * mas barato que una consulta por jugada.
+ */
+function resolverTope(filas, loteriaId, tipo, numeros) {
+  let mejor = null;
+  let mejorRango = 99;
+  for (const f of filas) {
+    if (f.tipo !== tipo) continue;
+    const lotOk = f.loteria_id === null || Number(f.loteria_id) === Number(loteriaId);
+    if (!lotOk) continue;
+    const numOk = f.numero === null || f.numero === numeros;
+    if (!numOk) continue;
+
+    const rango = f.loteria_id !== null && f.numero !== null ? 1
+      : f.loteria_id === null && f.numero !== null ? 2
+      : f.loteria_id !== null ? 3
+      : 4;
+    if (rango < mejorRango) { mejorRango = rango; mejor = f; }
+  }
+  return mejor ? Number(mejor.monto_max) || 0 : 0;
+}
+
+/**
  * Verifica un lote de jugadas nuevas contra los topes, acumulando tambien
  * lo que el propio lote agrega (para que no se cuele en una sola venta).
+ *
+ * Resuelve todo en DOS consultas, sin importar cuantas jugadas traiga el
+ * ticket: la version anterior hacia dos por jugada, y contra una base en red
+ * eso convertia cada venta en una espera de segundos.
  *
  * @param fecha  'YYYY-MM-DD'
  * @param items  [{loteria_id, loteria2_id, tipo, numeros, monto, loteria_nombre}]
  * @returns {{ok:boolean, errores:string[]}}
  */
 async function verificarLote(fecha, items) {
+  if (!items.length) return { ok: true, errores: [] };
+
+  const filasLimites = await q.todos('SELECT loteria_id, tipo, numero, monto_max FROM limites');
+
+  // Solo interesa lo vendido de las combinaciones que trae este ticket.
+  const numeros = [...new Set(items.map((i) => i.numeros))];
+  const tipos = [...new Set(items.map((i) => i.tipo))];
+  const loterias = [...new Set(items.map((i) => Number(i.loteria_id)))];
+
+  const filasVendido = await q.todos(
+    `SELECT j.loteria_id, COALESCE(j.loteria2_id, 0) AS loteria2_id, j.tipo, j.numeros,
+            SUM(j.monto) AS vendido
+       FROM jugadas j
+       JOIN tickets t ON t.id = j.ticket_id
+      WHERE t.fecha_sorteo = @fecha::date
+        AND t.estado <> 'cancelado'
+        AND j.estado <> 'cancelada'
+        AND j.numeros = ANY(@numeros::text[])
+        AND j.tipo = ANY(@tipos::text[])
+        AND j.loteria_id = ANY(@loterias::bigint[])
+      GROUP BY j.loteria_id, COALESCE(j.loteria2_id, 0), j.tipo, j.numeros`,
+    { fecha, numeros, tipos, loterias }
+  );
+
+  const vendidoPor = new Map();
+  for (const f of filasVendido) {
+    vendidoPor.set(
+      `${Number(f.loteria_id)}|${Number(f.loteria2_id)}|${f.tipo}|${f.numeros}`,
+      Number(f.vendido) || 0
+    );
+  }
+
   const acumulado = new Map();
   const errores = [];
 
   for (const it of items) {
-    const clave = `${it.loteria_id}|${it.loteria2_id || 0}|${it.tipo}|${it.numeros}`;
-    const tope = await limiteDe(it.loteria_id, it.tipo, it.numeros);
+    const clave = `${Number(it.loteria_id)}|${Number(it.loteria2_id) || 0}|${it.tipo}|${it.numeros}`;
+    const tope = resolverTope(filasLimites, it.loteria_id, it.tipo, it.numeros);
     if (tope <= 0) continue;
 
-    if (!acumulado.has(clave)) {
-      acumulado.set(clave, await vendidoDe(fecha, it.loteria_id, it.loteria2_id, it.tipo, it.numeros));
-    }
+    if (!acumulado.has(clave)) acumulado.set(clave, vendidoPor.get(clave) || 0);
+
     const previo = acumulado.get(clave);
     const nuevo = previo + Number(it.monto);
     if (nuevo > tope + 1e-9) {
@@ -112,4 +171,4 @@ async function exposicion(fecha, loteriaId = null, tipo = 'quiniela') {
   );
 }
 
-module.exports = { limiteDe, vendidoDe, verificarLote, exposicion };
+module.exports = { limiteDe, vendidoDe, verificarLote, exposicion, resolverTope };

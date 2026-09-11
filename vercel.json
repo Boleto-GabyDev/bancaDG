@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "public",
+  "_comentario_regions": "iad1 = Washington DC = us-east-1, la misma region que la base en Supabase. Si mueve el proyecto de Supabase a otra region, cambie esto: una venta hace ~10 consultas y cruzar regiones las convierte en ~10 x 50ms en vez de ~10 x 2ms.",
+  "regions": ["iad1"],
   "functions": {
     "api/index.js": {
       "maxDuration": 30,

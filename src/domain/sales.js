@@ -211,13 +211,17 @@ async function crearTicket(usuario, datos, ip = '') {
     const codigo = `${banca.codigo}-${String(id).padStart(7, '0')}`;
     await t.correr('UPDATE tickets SET codigo = ? WHERE id = ?', [codigo, id]);
 
-    for (const j of jugadas) {
-      await t.correr(
-        `INSERT INTO jugadas (ticket_id, loteria_id, loteria2_id, tipo, numeros, monto)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, j.loteria_id, j.loteria2_id, j.tipo, j.numeros, j.monto]
-      );
-    }
+    // Un solo INSERT con todas las jugadas: contra una base en red, insertar
+    // de a una convertiria un ticket de 20 jugadas en 20 viajes.
+    const tuplas = jugadas.map((_, k) =>
+      k === 0 ? '(?::bigint, ?::bigint, ?::bigint, ?::text, ?::text, ?::numeric)' : '(?, ?, ?, ?, ?, ?)'
+    ).join(',');
+    await t.correr(
+      `INSERT INTO jugadas (ticket_id, loteria_id, loteria2_id, tipo, numeros, monto)
+       VALUES ${tuplas}`,
+      jugadas.flatMap((j) => [id, j.loteria_id, j.loteria2_id, j.tipo, j.numeros, j.monto])
+    );
+
     return { id, codigo, pin };
   });
 
