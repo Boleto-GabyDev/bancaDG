@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es" data-tema="claro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Banca DG - Sistema de Loterias</title>
+  <link rel="icon" href="/img/logo.jpeg">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+  <!-- ============ LOGIN ============ -->
+  <div id="pantalla-login" class="login-fondo">
+    <form class="login-caja" id="form-login" autocomplete="off">
+      <img src="/img/logo.jpeg" alt="Banca DG" class="login-logo">
+      <h1 id="login-titulo">Banca DG</h1>
+      <div class="lema" id="login-lema">Loterias Dominicanas</div>
+
+      <label class="campo">
+        <span>Usuario</span>
+        <input id="login-usuario" name="usuario" autocomplete="username" required autofocus>
+      </label>
+      <label class="campo">
+        <span>Clave</span>
+        <input id="login-clave" name="clave" type="password" autocomplete="current-password" required>
+      </label>
+
+      <div id="login-error" class="oculto" style="color:var(--error);font-size:.86rem;margin:6px 0 10px;font-weight:600"></div>
+
+      <button class="bloque grande" type="submit" id="login-boton">Entrar</button>
+      <p class="chico tenue centro" style="margin-top:14px;margin-bottom:0">
+        Sistema de administracion de banca de loteria
+      </p>
+    </form>
+  </div>
+
+  <!-- ============ APLICACION ============ -->
+  <div id="app" class="app">
+    <header class="barra">
+      <img src="/img/logo.jpeg" alt="">
+      <div class="marca">
+        <span id="marca-nombre">Banca DG</span>
+        <small id="marca-lema">Loterias Dominicanas</small>
+      </div>
+      <div class="crece"></div>
+      <div class="reloj" id="reloj">--:--:--</div>
+      <button class="icono sec" id="btn-tema" title="Cambiar tema">&#9681;</button>
+      <div class="quien">
+        <b id="quien-nombre">-</b>
+        <span id="quien-rol">-</span>
+      </div>
+      <button class="icono" id="btn-salir" title="Cerrar sesion">Salir</button>
+    </header>
+
+    <div class="cuerpo">
+      <nav class="menu" id="menu"></nav>
+      <main class="contenido" id="vista"></main>
+    </div>
+  </div>
+
+  <div id="avisos"></div>
+  <div id="modales"></div>
+  <div id="area-impresion"></div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+'use strict';
+
+/**
+ * Capa de acceso a datos sobre PostgreSQL (Supabase).
+ *
+ * La aplicacion nacio sobre SQLite sincrono. Para no reescribir 116 consultas
+ * a mano (y arriesgar erratas) este modulo hace tres cosas:
+ *
+ *  1. Traduce los marcadores  ?  y  @nombre  a los  $1..$n  de Postgres,
+ *     de modo que el SQL existente sigue siendo valido.
+ *
+ *  2. Normaliza los tipos que devuelve el driver para que la capa de negocio
+ *     reciba lo mismo que recibia de SQLite:
+ *        numeric   -> number   (por defecto pg devuelve string)
+ *        bigint    -> number   (COUNT(*) devuelve string)
+ *        date      -> 'YYYY-MM-DD'
+ *        timestamp -> 'YYYY-MM-DD HH:MM:SS' en hora de Republica Dominicana
+ *
+ *  3. Expone transacciones que toman UNA sola conexion del pool, requisito
+ *     del pooler de Supabase en modo transaccion.
+ */
+
+const { Pool, types } = require('pg');
+const { traducir, valores } = require('./sql');
+const { DATABASE_URL, TZ } = require('../config');
+
+// ---------------------------------------------------------------
+// Normalizacion de tipos
+// ---------------------------------------------------------------
+const OID = { INT8: 20, NUMERIC: 1700, DATE: 1082, TIMESTAMP: 1114, TIMESTAMPTZ: 1184 };
+
+types.setTypeParser(OID.INT8, (v) => (v === null ? null : Number(v)));
+types.setTypeParser(OID.NUMERIC, (v) => (v === null ? null : Number(v)));
+// Las fechas viajan como texto plano: el negocio trabaja con 'YYYY-MM-DD'.
+types.setTypeParser(OID.DATE, (v) => v);
+
+const fmtRD = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+});
+
+/** timestamptz -> 'YYYY-MM-DD HH:MM:SS' en hora dominicana. */
+function aHoraRD(valor) {
+  if (valor === null || valor === undefined) return null;
+  const d = valor instanceof Date ? valor : new Date(valor);
+  if (Number.isNaN(d.getTime())) return String(valor);
+  const p = {};
+  for (const { type, value } of fmtRD.formatToParts(d)) p[type] = value;
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+types.setTypeParser(OID.TIMESTAMPTZ, aHoraRD);
+types.setTypeParser(OID.TIMESTAMP, (v) => (v ? String(v).replace('T', ' ').slice(0, 19) : v));
+
+// ---------------------------------------------------------------
+// Pool de conexiones
+// ---------------------------------------------------------------
+if (!DATABASE_URL) {
+  throw new Error(
+    'Falta DATABASE_URL. Cree un archivo .env con la cadena de conexion de Supabase.\n' +
+    'Ejemplo:  DATABASE_URL=postgresql://postgres.xxxx:CLAVE@aws-0-us-east-1.pooler.supabase.com:6543/postgres'
+  );
+}
+
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  // Supabase exige TLS. El certificado es de una CA publica, pero el pooler
+  // se presenta con un nombre distinto al del proyecto, asi que no se valida
+  // el hostname (la conexion sigue cifrada).
+  ssl: DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1')
+    ? false
+    : { rejectUnauthorized: false },
+  // En serverless cada instancia debe abrir pocas conexiones: el pooler de
+  // Supabase es quien multiplexa de verdad.
+  max: Number(process.env.PG_MAX_CLIENTES || (process.env.VERCEL ? 1 : 10)),
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 15000,
+  application_name: 'banca-dg',
+});
+
+pool.on('error', (e) => console.error('[pg] error en conexion inactiva:', e.message));
+
+// ---------------------------------------------------------------
+// API de consultas
+// ---------------------------------------------------------------
+function ejecutor(cliente) {
+  const correr = async (sql, params) => {
+    const { texto, nombres } = traducir(sql);
+    try {
+      return await (cliente || pool).query(texto, valores(nombres, params));
+    } catch (e) {
+      e.message = `${e.message}\n  SQL: ${texto.replace(/\s+/g, ' ').slice(0, 240)}`;
+      throw e;
+    }
+  };
+
+  return {
+    /** Primera fila, o null. */
+    uno: async (sql, params) => (await correr(sql, params)).rows[0] ?? null,
+    /** Todas las filas. */
+    todos: async (sql, params) => (await correr(sql, params)).rows,
+    /** INSERT/UPDATE/DELETE: devuelve { filas, rows }. */
+    correr: async (sql, params) => {
+      const r = await correr(sql, params);
+      return { filas: r.rowCount, rows: r.rows };
+    },
+    /** Un solo valor escalar de la primera fila. */
+    valor: async (sql, params) => {
+      const fila = (await correr(sql, params)).rows[0];
+      return fila ? Object.values(fila)[0] : null;
+    },
+  };
+}
+
+const q = ejecutor(null);
+
+/**
+ * Transaccion. El callback recibe un ejecutor atado a UNA conexion; todo lo
+ * que se haga con el viaja en la misma transaccion.
+ *
+ *   await tx(async (t) => {
+ *     await t.correr('INSERT ...');
+ *     await t.correr('UPDATE ...');
+ *   });
+ */
+async function tx(fn) {
+  const cliente = await pool.connect();
+  try {
+    await cliente.query('BEGIN');
+    const r = await fn(ejecutor(cliente));
+    await cliente.query('COMMIT');
+    return r;
+  } catch (e) {
+    try { await cliente.query('ROLLBACK'); } catch { /* la conexion ya murio */ }
+    throw e;
+  } finally {
+    cliente.release();
+  }
+}
+
+/** Comprueba que la base responde y tiene el esquema aplicado. */
+async function comprobar() {
+  const r = await q.uno(
+    `SELECT current_database() AS base,
+            (SELECT COUNT(*) FROM information_schema.tables
+              WHERE table_schema = 'public'
+                AND table_name IN ('bancas','usuarios','loterias','tickets','jugadas',
+                                   'resultados','premios','limites','settings','sesiones',
+                                   'cierres','auditoria')) AS tablas`
+  );
+  return { base: r.base, tablas: Number(r.tablas), completo: Number(r.tablas) === 12 };
+}
+
+async function cerrar() {
+  try { await pool.end(); } catch { /* ya cerrado */ }
+}
+
+// ---------------------------------------------------------------
+// Settings (clave/valor). Se cachean en memoria porque se leen en cada
+// venta y cambian muy poco; el cache se invalida al escribir.
+// ---------------------------------------------------------------
+let cacheSettings = null;
+let cacheVence = 0;
+const VIDA_CACHE_MS = 30_000;
+
+async function cargarSettings(forzar = false) {
+  if (!forzar && cacheSettings && Date.now() < cacheVence) return cacheSettings;
+  const filas = await q.todos('SELECT key, value FROM settings');
+  const out = {};
+  for (const f of filas) out[f.key] = f.value;   // jsonb ya viene deserializado
+  cacheSettings = out;
+  cacheVence = Date.now() + VIDA_CACHE_MS;
+  return out;
+}
+
+async function getSetting(key, porDefecto = null) {
+  const todos = await cargarSettings();
+  return key in todos ? todos[key] : porDefecto;
+}
+
+async function setSetting(key, value) {
+  await q.correr(
+    `INSERT INTO settings (key, value, actualizado) VALUES (?, ?, now())
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value, actualizado = excluded.actualizado`,
+    [key, JSON.stringify(value)]
+  );
+  cacheSettings = null;
+  return value;
+}
+
+const allSettings = () => cargarSettings(true);
+
+// ---------------------------------------------------------------
+// Auditoria
+// ---------------------------------------------------------------
+async function auditar({ usuario_id = null, usuario = '', accion, entidad = '', entidad_id = '', detalle = '', ip = '' }) {
+  try {
+    await q.correr(
+      `INSERT INTO auditoria (usuario_id, usuario, accion, entidad, entidad_id, detalle, ip)
+       VALUES (@usuario_id, @usuario, @accion, @entidad, @entidad_id, @detalle, @ip)`,
+      {
+        usuario_id, usuario, accion, entidad,
+        entidad_id: String(entidad_id ?? ''),
+        detalle: typeof detalle === 'string' ? detalle : JSON.stringify(detalle),
+        ip,
+      }
+    );
+  } catch (e) {
+    // La bitacora nunca debe tumbar una venta.
+    console.error('[auditoria] no se pudo registrar:', e.message);
+  }
+}
+
+module.exports = {
+  pool, q, tx, comprobar, cerrar, aHoraRD,
+  getSetting, setSetting, allSettings, cargarSettings, auditar,
+};
