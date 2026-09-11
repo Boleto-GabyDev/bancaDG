@@ -4,11 +4,6 @@
   "buildCommand": null,
   "outputDirectory": "public",
   "regions": ["iad1"],
-  "functions": {
-    "api/[...ruta].js": {
-      "maxDuration": 30
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
