@@ -1,0 +1,43 @@
+{
+  "_comentario": [
+    "Copie este archivo como usuarios.json (ese nombre esta en .gitignore),",
+    "ponga los nombres y las claves reales y ejecute:  npm run usuarios",
+    "Para ver que haria sin tocar la base:             npm run usuarios -- --ver",
+    "Cuando termine, borre usuarios.json y CLAVES-INICIALES.txt."
+  ],
+  "banca": {
+    "codigo": "001",
+    "nombre": "Banca DG - Principal"
+  },
+  "usuarios": [
+    {
+      "usuario": "admin",
+      "nombre": "Nombre del administrador",
+      "rol": "admin",
+      "clave": "cambie-esta-clave",
+      "comision_pct": 0
+    },
+    {
+      "usuario": "vendedor1",
+      "nombre": "Nombre del primer vendedor",
+      "rol": "vendedor",
+      "clave": "cambie-esta-clave",
+      "comision_pct": 10
+    },
+    {
+      "usuario": "vendedor2",
+      "nombre": "Nombre del segundo vendedor",
+      "rol": "vendedor",
+      "clave": "cambie-esta-clave",
+      "comision_pct": 10
+    },
+    {
+      "usuario": "vendedor3",
+      "nombre": "Nombre del tercer vendedor",
+      "rol": "vendedor",
+      "clave": "cambie-esta-clave",
+      "comision_pct": 10
+    }
+  ],
+  "desactivar": ["banca1", "cajero1"]
+}

@@ -14,7 +14,8 @@ router.use(A.requiereAuth);
 /** Verifica que el usuario pueda ver ese ticket. */
 function puedeVer(usuario, t) {
   if (usuario.rol === 'admin') return true;
-  // El cajero necesita abrir tickets de su banca para poder pagar premios.
+  // El cajero solo abre lo que el mismo vendio; los premios los paga la banca.
+  if (usuario.rol === 'vendedor') return Number(t.usuario_id) === usuario.id;
   return Number(t.banca_id) === usuario.banca_id;
 }
 
@@ -44,7 +45,8 @@ router.post('/:codigo/cancelar', ah(async (req, res) => {
 }));
 
 // --- Pagar premio ------------------------------------------------
-router.post('/:codigo/pagar', ah(async (req, res) => {
+// Entregar dinero por ventanilla lo autoriza la banca, no el cajero.
+router.post('/:codigo/pagar', A.requiereRol('admin', 'banca'), ah(async (req, res) => {
   const t = await V.pagarTicket(req.usuario, req.params.codigo, req.body || {}, A.ipDe(req));
   res.json({ ok: true, ticket: t });
 }));

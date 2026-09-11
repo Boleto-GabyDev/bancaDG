@@ -46,14 +46,26 @@ DATABASE_PASSWORD=la-clave-de-la-base
 
 ```bash
 npm install
-npm run seed
+cp usuarios.ejemplo.json usuarios.json     # en Windows: copy
 ```
 
-Crea la banca `001` y tres usuarios con **claves aleatorias fuertes**, que se
-muestran una sola vez y se guardan en `CLAVES-INICIALES.txt` (ignorado por git).
-Léalas, guárdelas en su gestor de contraseñas y borre el archivo.
+Abra `usuarios.json` y ponga las personas reales: el administrador y sus
+vendedores, cada uno con su clave (mínimo 8 caracteres) y su comisión. Después:
 
-Para regenerarlas: `npm run seed -- --reset-claves`.
+```bash
+npm run usuarios -- --ver   # muestra lo que haría, sin tocar la base
+npm run usuarios            # lo aplica
+```
+
+Crea la banca, da de alta a cada quien y **desactiva** los usuarios que liste
+en `"desactivar"`. Es idempotente: si lo vuelve a correr, actualiza nombre,
+rol, comisión y clave. El resumen queda en `CLAVES-INICIALES.txt`.
+
+> `usuarios.json` y `CLAVES-INICIALES.txt` llevan claves en claro y están
+> ignorados por git. Repártalas y **borre los dos archivos**.
+
+Para una instalación de prueba con claves aleatorias existe `npm run seed`,
+que crea `admin`, `banca1` y `cajero1`. No lo use en producción.
 
 ### 4. Correr en local
 
@@ -125,9 +137,15 @@ Debe responder `{"ok":true,"esquema_completo":true,...}`.
 
 | Rol | Qué puede hacer |
 |-----|-----------------|
-| **Cajero** | Facturar, anular dentro de la ventana permitida, pagar premios de su banca, ver sus reportes y su cierre de caja. |
-| **Encargado** | Todo lo del cajero para **toda su banca**, más cargar resultados, ver riesgo, administrar sus cajeros y la auditoría. |
-| **Administrador** | Todo: loterías, multiplicadores, topes, bancas, configuración y mantenimiento. |
+| **Vendedor** (cajero) | Facturar, anular sus propios tickets dentro de la ventana permitida, consultar los números ganadores y ver en **Mi día** cuánto lleva facturado. Nada más. |
+| **Encargado** de banca | Todo lo anterior para **toda su banca**, más pagar premios, cargar resultados, ver riesgo y reportes, firmar el cierre de caja, administrar sus cajeros y la auditoría. |
+| **Administrador** | Todo, incluido facturar: loterías, multiplicadores, topes, bancas, usuarios, configuración y mantenimiento. |
+
+El vendedor **no** ve el tablero, los reportes de gestión, el riesgo, los
+premios por pagar ni ninguna pantalla administrativa, y **no puede pagar
+premios**: entregar dinero por ventanilla lo autoriza la banca. El menú se
+dibuja según el rol, pero el permiso de verdad lo aplica el servidor en
+`src/routes/` (`requiereRol`), así que no se salta escribiendo una URL.
 
 ---
 
@@ -272,7 +290,8 @@ tenga ventas reales**: escribe tickets de prueba.
 ```bash
 npm start      # servidor local
 npm run dev    # con recarga automática
-npm run seed   # crear banca y usuarios (idempotente)
+npm run usuarios # dar de alta a las personas reales (usuarios.json)
+npm run seed   # instalacion de prueba con claves aleatorias
 npm run salud  # comprobar la conexión a la base
 ```
 
@@ -287,7 +306,8 @@ src/
   db/
     index.js           pool de Postgres, tipos, transacciones, settings
     sql.js             traduccion de marcadores ? y @nombre a $n
-    seed.js            banca y usuarios iniciales
+    seed.js            banca y usuarios de prueba (claves al azar)
+    usuarios.js        alta de los usuarios reales desde usuarios.json
   lib/                 fechas RD, autenticacion, validacion HTTP
   domain/              reglas del negocio
     plays.js             tipos de jugada y normalizacion de numeros

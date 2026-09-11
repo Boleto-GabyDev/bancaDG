@@ -9,3 +9,4 @@ data/
 .vercel
 .DS_Store
 Thumbs.db
+usuarios.json

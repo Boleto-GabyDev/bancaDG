@@ -341,6 +341,9 @@ async function pagarTicket(usuario, idOcodigo, opciones = {}, ip = '') {
   if (t.estado !== 'ganador' || !(Number(t.premio_total) > 0)) {
     throw new HttpError(409, 'El ticket no tiene premio por pagar.');
   }
+  if (usuario.rol === 'vendedor') {
+    throw new HttpError(403, 'El pago de premios lo autoriza la banca.');
+  }
   if (usuario.rol !== 'admin' && Number(t.banca_id) !== usuario.banca_id) {
     throw new HttpError(403, 'El ticket pertenece a otra banca.');
   }

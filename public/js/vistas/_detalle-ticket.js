@@ -158,7 +158,7 @@ export function abrirTicket(t, alCambiar = null) {
     });
   }
 
-  if (t.estado === 'ganador' && ['admin', 'banca', 'vendedor'].includes(u.rol)) {
+  if (t.estado === 'ganador' && ['admin', 'banca'].includes(u.rol)) {
     botones.push({
       texto: `Pagar ${dinero(t.premio_total)}`, clase: 'ok',
       alHacerClick: async ({ cerrar }) => {

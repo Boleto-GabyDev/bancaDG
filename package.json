@@ -9,7 +9,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "seed": "node src/db/seed.js",
-    "salud": "node -e \"require('./src/db').comprobar().then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})\""
+    "salud": "node -e \"require('./src/db').comprobar().then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})\"",
+    "usuarios": "node src/db/usuarios.js"
   },
   "engines": {
     "node": "22.x"

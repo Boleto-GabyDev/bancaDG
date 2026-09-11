@@ -18,6 +18,7 @@ const VISTAS = {
   reportes:    () => import('./vistas/reportes.js'),
   riesgo:      () => import('./vistas/riesgo.js'),
   cierre:      () => import('./vistas/cierre.js'),
+  midia:       () => import('./vistas/midia.js'),
   usuarios:    () => import('./vistas/usuarios.js'),
   loterias:    () => import('./vistas/loterias.js'),
   pagos:       () => import('./vistas/pagos.js'),
@@ -30,16 +31,21 @@ const VISTAS = {
 const MENU = [
   { grupo: 'Operacion' },
   { id: 'venta',      texto: 'Punto de venta', ico: '&#128181;', roles: ['admin', 'banca', 'vendedor'] },
-  { id: 'tickets',    texto: 'Tickets',        ico: '&#127915;', roles: ['admin', 'banca', 'vendedor'] },
-  { id: 'premios',    texto: 'Pagar premio',   ico: '&#127942;', roles: ['admin', 'banca', 'vendedor'] },
+  { id: 'tickets',    texto: 'Tickets',        ico: '&#127915;', roles: ['admin', 'banca', 'vendedor'],
+    alias: { vendedor: 'Mis tickets' } },
+  { id: 'premios',    texto: 'Pagar premio',   ico: '&#127942;', roles: ['admin', 'banca'] },
   { id: 'resultados', texto: 'Resultados',     ico: '&#127919;', roles: ['admin', 'banca', 'vendedor'] },
+
+  // El cajero no ve reportes de gestion: solo lo que el mismo facturo.
+  { grupo: 'Mi caja' },
+  { id: 'midia',      texto: 'Mi dia',         ico: '&#128176;', roles: ['vendedor'] },
 
   { grupo: 'Control' },
   { id: 'panel',      texto: 'Tablero',        ico: '&#128202;', roles: ['admin', 'banca'] },
-  { id: 'reportes',   texto: 'Reportes',       ico: '&#128203;', roles: ['admin', 'banca', 'vendedor'] },
+  { id: 'reportes',   texto: 'Reportes',       ico: '&#128203;', roles: ['admin', 'banca'] },
   { id: 'riesgo',     texto: 'Riesgo y topes', ico: '&#9888;',   roles: ['admin', 'banca'] },
-  { id: 'cierre',     texto: 'Cierre de caja', ico: '&#129534;', roles: ['admin', 'banca', 'vendedor'] },
-  { id: 'pagos',      texto: 'Premios por pagar', ico: '&#128176;', roles: ['admin', 'banca'] },
+  { id: 'cierre',     texto: 'Cierre de caja', ico: '&#129534;', roles: ['admin', 'banca'] },
+  { id: 'pagos',      texto: 'Premios por pagar', ico: '&#128181;', roles: ['admin', 'banca'] },
 
   { grupo: 'Administracion' },
   { id: 'usuarios',   texto: 'Usuarios',       ico: '&#128100;', roles: ['admin', 'banca'] },
@@ -96,7 +102,7 @@ function dibujarMenu() {
     if (!item.roles.includes(rol)) continue;
     if (grupoPendiente) { partes.push(`<div class="grupo">${esc(grupoPendiente)}</div>`); grupoPendiente = null; }
     partes.push(
-      `<a data-ruta="${item.id}" href="#/${item.id}"><span class="ico">${item.ico}</span>${esc(item.texto)}</a>`
+      `<a data-ruta="${item.id}" href="#/${item.id}"><span class="ico">${item.ico}</span>${esc(item.alias?.[rol] || item.texto)}</a>`
     );
   }
   $('#menu').innerHTML = partes.join('');
