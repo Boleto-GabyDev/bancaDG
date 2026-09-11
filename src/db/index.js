@@ -55,11 +55,16 @@ types.setTypeParser(OID.TIMESTAMP, (v) => (v ? String(v).replace('T', ' ').slice
 // ---------------------------------------------------------------
 // Pool de conexiones
 // ---------------------------------------------------------------
-if (!DATABASE_URL) {
-  throw new Error(
-    'Falta DATABASE_URL. Cree un archivo .env con la cadena de conexion de Supabase.\n' +
-    'Ejemplo:  DATABASE_URL=postgresql://postgres.xxxx:CLAVE@aws-0-us-east-1.pooler.supabase.com:6543/postgres'
-  );
+/**
+ * Error de instalacion, no de programacion: falta algo por configurar.
+ * Se marca para que la capa HTTP lo muestre tal cual en vez de esconderlo
+ * tras un "error interno"; es justo lo que necesita ver quien instala.
+ */
+function errorConfig(mensaje) {
+  const e = new Error(mensaje);
+  e.status = 503;
+  e.configuracion = true;
+  return e;
 }
 
 /**
@@ -73,19 +78,19 @@ function configDeConexion(url) {
   try {
     u = new URL(url);
   } catch {
-    throw new Error(`DATABASE_URL no es una cadena de conexion valida: "${url.slice(0, 30)}..."`);
+    throw errorConfig(`DATABASE_URL no es una cadena de conexion valida: "${url.slice(0, 30)}..."`);
   }
 
   const clave = DATABASE_PASSWORD || decodeURIComponent(u.password || '');
 
   if (/^\[.*\]$/.test(clave) || /YOUR[-_ ]?PASSWORD/i.test(clave)) {
-    throw new Error(
+    throw errorConfig(
       'La clave de DATABASE_URL sigue siendo el texto de ejemplo de Supabase.\n' +
       'Reemplace [YOUR-PASSWORD] por la clave real de la base\n' +
       '(Supabase -> Project Settings -> Database -> Database password).'
     );
   }
-  if (!clave) throw new Error('DATABASE_URL no trae clave. Use DATABASE_PASSWORD si prefiere ponerla aparte.');
+  if (!clave) throw errorConfig('DATABASE_URL no trae clave. Use DATABASE_PASSWORD si prefiere ponerla aparte.');
 
   const local = ['localhost', '127.0.0.1', '::1'].includes(u.hostname);
 
@@ -116,9 +121,30 @@ function configDeConexion(url) {
   };
 }
 
-const pool = new Pool(configDeConexion(DATABASE_URL));
+/**
+ * El pool se abre en la primera consulta, no al importar el modulo.
+ *
+ * Importa en serverless: si esto reventara al importarse, la funcion entera
+ * no llegaria a existir y el navegador solo veria un error opaco de la
+ * plataforma. Asi la aplicacion levanta igual y contesta explicando que le
+ * falta por configurar.
+ */
+let pool = null;
 
-pool.on('error', (e) => console.error('[pg] error en conexion inactiva:', e.message));
+function obtenerPool() {
+  if (pool) return pool;
+  if (!DATABASE_URL) {
+    throw errorConfig(
+      'Falta la conexion a la base de datos (DATABASE_URL).\n' +
+      'En local: cree el archivo .env con la cadena de Supabase.\n' +
+      'En Vercel: cargue DATABASE_URL y DATABASE_PASSWORD en Settings -> ' +
+      'Environment Variables y vuelva a desplegar.'
+    );
+  }
+  pool = new Pool(configDeConexion(DATABASE_URL));
+  pool.on('error', (e) => console.error('[pg] error en conexion inactiva:', e.message));
+  return pool;
+}
 
 // ---------------------------------------------------------------
 // API de consultas
@@ -127,8 +153,11 @@ function ejecutor(cliente) {
   const correr = async (sql, params) => {
     const { texto, nombres } = traducir(sql);
     try {
-      return await (cliente || pool).query(texto, valores(nombres, params));
+      return await (cliente || obtenerPool()).query(texto, valores(nombres, params));
     } catch (e) {
+      // A un fallo de configuracion no le agrega la consulta: no fallo el SQL,
+      // falta la conexion, y el SQL solo ensucia el mensaje que ve el usuario.
+      if (e.configuracion) throw e;
       e.message = `${e.message}\n  SQL: ${texto.replace(/\s+/g, ' ').slice(0, 240)}`;
       throw e;
     }
@@ -164,7 +193,7 @@ const q = ejecutor(null);
  *   });
  */
 async function tx(fn) {
-  const cliente = await pool.connect();
+  const cliente = await obtenerPool().connect();
   try {
     await cliente.query('BEGIN');
     const r = await fn(ejecutor(cliente));
@@ -192,6 +221,7 @@ async function comprobar() {
 }
 
 async function cerrar() {
+  if (!pool) return;
   try { await pool.end(); } catch { /* ya cerrado */ }
 }
 

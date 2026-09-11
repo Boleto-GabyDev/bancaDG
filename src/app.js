@@ -94,10 +94,14 @@ function crearApp() {
     const status = err instanceof HttpError ? err.status : (err.status || 500);
     if (status >= 500) console.error('[error]', err);
 
-    // Nunca devolver detalles internos de Postgres al navegador.
-    const mensaje = status >= 500
-      ? 'Error interno del servidor. Intente de nuevo.'
-      : (err.message || 'Solicitud invalida.');
+    // Nunca devolver detalles internos de Postgres al navegador. La excepcion
+    // es un fallo de instalacion (falta DATABASE_URL y demas): ese hay que
+    // decirlo, porque sin verlo nadie sabe que tiene que ir a configurar.
+    const mensaje = err.configuracion
+      ? err.message
+      : status >= 500
+        ? 'Error interno del servidor. Intente de nuevo.'
+        : (err.message || 'Solicitud invalida.');
     res.status(status).json({ error: mensaje });
   });
 
