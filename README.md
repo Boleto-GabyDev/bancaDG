@@ -69,9 +69,10 @@ En Windows: doble clic en `Iniciar local.bat`.
 
 1. Suba el repositorio a GitHub.
 2. En Vercel: **Add New → Project → Import** del repositorio.
-3. Framework Preset: **Other**. No hace falta build command. (Vercel puede
-   autodetectar "Express"; cámbielo a Other: aquí no hay un servidor que
-   escuche un puerto, sino una función serverless en `api/`.)
+3. El Framework Preset no hay que tocarlo: `vercel.json` lo fija en "Other" y
+   eso tiene prioridad sobre lo que muestre la interfaz. (Vercel suele
+   autodetectar "Express" y buscar un servidor que escuche un puerto; aquí no
+   hay tal cosa, sino una función serverless en `api/`.)
 4. En **Settings → Environment Variables** agregue exactamente dos:
    `DATABASE_URL` y `DATABASE_PASSWORD`, para Production, Preview y
    Development.
