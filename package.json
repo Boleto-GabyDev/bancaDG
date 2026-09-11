@@ -12,7 +12,7 @@
     "salud": "node -e \"require('./src/db').comprobar().then(r=>{console.log(r);process.exit(0)}).catch(e=>{console.error(e.message);process.exit(1)})\""
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "dependencies": {
     "express": "^4.21.2",

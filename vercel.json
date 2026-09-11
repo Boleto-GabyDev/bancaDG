@@ -1,15 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": null,
   "outputDirectory": "public",
   "regions": ["iad1"],
   "functions": {
-    "api/index.js": {
+    "api/[...ruta].js": {
       "maxDuration": 30
     }
   },
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" }
-  ],
   "headers": [
     {
       "source": "/(.*)",

@@ -79,7 +79,12 @@ En Windows: doble clic en `Iniciar local.bat`.
    **No** agregue `PORT`: en serverless no se usa, la plataforma decide.
 5. Deploy.
 
-`vercel.json` ya enruta `/api/*` a la función y sirve `public/` como estático.
+`vercel.json` deja fijado en el repositorio el preset (`"framework": null`, es
+decir "Other"), la región y el directorio estático, para que el despliegue no
+dependa de lo que se haya elegido a mano en la interfaz.
+
+La API entra por `api/[...ruta].js`, una ruta comodín que atrapa todo `/api/*`
+y se lo pasa a Express con la URL original intacta.
 
 ### Sobre la región
 
@@ -273,7 +278,7 @@ npm run salud  # comprobar la conexión a la base
 ### Estructura
 
 ```
-api/index.js           punto de entrada de Vercel
+api/[...ruta].js       punto de entrada de Vercel (ruta comodin)
 src/
   app.js               construccion de la app Express
   server.js            servidor local
