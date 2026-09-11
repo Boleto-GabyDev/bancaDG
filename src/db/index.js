@@ -22,7 +22,7 @@
 
 const { Pool, types } = require('pg');
 const { traducir, valores } = require('./sql');
-const { DATABASE_URL, TZ } = require('../config');
+const { DATABASE_URL, DATABASE_PASSWORD, TZ } = require('../config');
 
 // ---------------------------------------------------------------
 // Normalizacion de tipos
@@ -62,21 +62,61 @@ if (!DATABASE_URL) {
   );
 }
 
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  // Supabase exige TLS. El certificado es de una CA publica, pero el pooler
-  // se presenta con un nombre distinto al del proyecto, asi que no se valida
-  // el hostname (la conexion sigue cifrada).
-  ssl: DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1')
-    ? false
-    : { rejectUnauthorized: false },
-  // En serverless cada instancia debe abrir pocas conexiones: el pooler de
-  // Supabase es quien multiplexa de verdad.
-  max: Number(process.env.PG_MAX_CLIENTES || (process.env.VERCEL ? 1 : 10)),
-  idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 15000,
-  application_name: 'banca-dg',
-});
+/**
+ * La cadena se descompone a mano en vez de pasarsela entera al driver.
+ * Asi la clave nunca depende de estar bien codificada dentro de una URL
+ * (las de Supabase suelen traer simbolos), y los errores de configuracion
+ * se detectan aqui con un mensaje claro en vez de fallar al conectar.
+ */
+function configDeConexion(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    throw new Error(`DATABASE_URL no es una cadena de conexion valida: "${url.slice(0, 30)}..."`);
+  }
+
+  const clave = DATABASE_PASSWORD || decodeURIComponent(u.password || '');
+
+  if (/^\[.*\]$/.test(clave) || /YOUR[-_ ]?PASSWORD/i.test(clave)) {
+    throw new Error(
+      'La clave de DATABASE_URL sigue siendo el texto de ejemplo de Supabase.\n' +
+      'Reemplace [YOUR-PASSWORD] por la clave real de la base\n' +
+      '(Supabase -> Project Settings -> Database -> Database password).'
+    );
+  }
+  if (!clave) throw new Error('DATABASE_URL no trae clave. Use DATABASE_PASSWORD si prefiere ponerla aparte.');
+
+  const local = ['localhost', '127.0.0.1', '::1'].includes(u.hostname);
+
+  if (!local && /^db\..*\.supabase\.co$/.test(u.hostname)) {
+    console.warn(
+      '\n  AVISO: esta usando la conexion directa de Supabase.\n' +
+      '  Ese host solo resuelve por IPv6 y Vercel no tiene salida IPv6.\n' +
+      '  Use el Transaction pooler:  postgres.<proyecto>@aws-0-<region>.pooler.supabase.com:6543\n'
+    );
+  }
+
+  return {
+    host: u.hostname,
+    port: Number(u.port) || 5432,
+    user: decodeURIComponent(u.username || 'postgres'),
+    password: clave,
+    database: (u.pathname || '/postgres').slice(1) || 'postgres',
+    // Supabase exige TLS. El certificado es de una CA publica, pero el pooler
+    // se presenta con un nombre distinto al del proyecto, asi que no se valida
+    // el hostname (la conexion sigue cifrada).
+    ssl: local ? false : { rejectUnauthorized: false },
+    // En serverless cada instancia debe abrir pocas conexiones: el pooler de
+    // Supabase es quien multiplexa de verdad.
+    max: Number(process.env.PG_MAX_CLIENTES || (process.env.VERCEL ? 1 : 10)),
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 15000,
+    application_name: 'banca-dg',
+  };
+}
+
+const pool = new Pool(configDeConexion(DATABASE_URL));
 
 pool.on('error', (e) => console.error('[pg] error en conexion inactiva:', e.message));
 

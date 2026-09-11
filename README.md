@@ -29,11 +29,18 @@ Supabase: **Project Settings → Database → Connection string → Transaction
 pooler**.
 
 ```
-DATABASE_URL=postgresql://postgres.xxxx:CLAVE@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql://postgres.xxxx@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+DATABASE_PASSWORD=la-clave-de-la-base
 ```
 
-> Use el **puerto 6543** (pooler), no el 5432. En serverless cada invocación
-> abre su propia conexión y el puerto directo se queda sin cupo enseguida.
+> **No use la conexión directa** (`db.<proyecto>.supabase.co:5432`): ese host
+> solo resuelve por IPv6 y Vercel no tiene salida IPv6, así que fallaría en
+> producción. El pooler es IPv4 y además multiplexa conexiones, que es lo que
+> necesita un entorno serverless.
+>
+> En el pooler el usuario lleva el código del proyecto pegado
+> (`postgres.<proyecto>`), no es solo `postgres`. La clave va en
+> `DATABASE_PASSWORD` para que no importe si trae símbolos.
 
 ### 3. Usuarios
 
@@ -63,8 +70,8 @@ En Windows: doble clic en `Iniciar local.bat`.
 1. Suba el repositorio a GitHub.
 2. En Vercel: **Add New → Project → Import** del repositorio.
 3. Framework Preset: **Other**. No hace falta build command.
-4. En **Settings → Environment Variables** agregue `DATABASE_URL` para
-   Production, Preview y Development.
+4. En **Settings → Environment Variables** agregue `DATABASE_URL` y
+   `DATABASE_PASSWORD` para Production, Preview y Development.
 5. Deploy.
 
 `vercel.json` ya enruta `/api/*` a la función y sirve `public/` como estático.

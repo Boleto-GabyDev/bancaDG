@@ -24,6 +24,13 @@ module.exports = {
   /** Cadena de conexion de Supabase / PostgreSQL. */
   DATABASE_URL: process.env.DATABASE_URL || process.env.POSTGRES_URL || '',
 
+  /**
+   * Clave de la base, opcional y aparte.
+   * Si se define, gana sobre la que venga dentro de DATABASE_URL. Sirve para
+   * claves con simbolos (@ # ? / %) que habria que codificar dentro de una URL.
+   */
+  DATABASE_PASSWORD: process.env.DATABASE_PASSWORD || process.env.PGPASSWORD || '',
+
   TZ: 'America/Santo_Domingo',
   SESSION_COOKIE: 'banca_sid',
   SESSION_HORAS: Number(process.env.BANCA_SESION_HORAS || 12),
