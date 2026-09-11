@@ -69,12 +69,29 @@ En Windows: doble clic en `Iniciar local.bat`.
 
 1. Suba el repositorio a GitHub.
 2. En Vercel: **Add New → Project → Import** del repositorio.
-3. Framework Preset: **Other**. No hace falta build command.
-4. En **Settings → Environment Variables** agregue `DATABASE_URL` y
-   `DATABASE_PASSWORD` para Production, Preview y Development.
+3. Framework Preset: **Other**. No hace falta build command. (Vercel puede
+   autodetectar "Express"; cámbielo a Other: aquí no hay un servidor que
+   escuche un puerto, sino una función serverless en `api/`.)
+4. En **Settings → Environment Variables** agregue exactamente dos:
+   `DATABASE_URL` y `DATABASE_PASSWORD`, para Production, Preview y
+   Development.
+
+   **No** agregue `PORT`: en serverless no se usa, la plataforma decide.
 5. Deploy.
 
 `vercel.json` ya enruta `/api/*` a la función y sirve `public/` como estático.
+
+### Sobre la región
+
+`vercel.json` fija `"regions": ["iad1"]` (Washington DC = us-east-1), la misma
+región donde está la base en Supabase. Esto importa: una venta hace unas diez
+consultas, y cruzar regiones las convierte en diez viajes de ~50 ms en vez de
+diez de ~2 ms — la diferencia entre facturar en medio segundo o en cinco.
+
+Si alguna vez mueve el proyecto de Supabase a otra región, cambie ese valor.
+
+> `vercel.json` se valida contra un esquema estricto: no admite propiedades
+> que no estén en él (no se pueden dejar comentarios dentro del archivo).
 
 Después del primer deploy, verifique:
 
